@@ -1,0 +1,483 @@
+---
+title: "heatmaps for covid paper"
+output: html_notebook
+---
+
+
+
+
+
+### clean environment
+```{r}
+rm(list=ls())
+```
+
+### set directory
+```{r setup}
+    knitr::opts_knit$set(root.dir = normalizePath("~/Desktop/Code-PHD/Proteomics_virus/")) 
+```
+
+```{r}
+library(ComplexHeatmap)
+library(circlize)
+```
+## import dge
+```{r}
+caco_DGE <- read.csv("/home/flomik/Desktop/Code-PHD/Proteomics_virus/processing/Shuba_caco_DGE_selected_pathways_no_pvalue_cutoff.csv")
+huh7_DGE <- read.csv("/home/flomik/Desktop/Code-PHD/Proteomics_virus/processing/Shuba_huh7_DGE_selected_pathways_no_pvalue_cutoff.csv")
+huh7_new_DGE <- read.csv("processing/Shuba_new_huh7_DGE_selected_pathways.csv")
+t293_DGE <- read.csv("processing/Shuba_t293_new_DGE_selected_pathways_no_pvalue_cutoff.csv")
+```
+
+## import data
+```{r}
+caco <- read.delim("/home/flomik/Desktop/Code-PHD/Proteomics_virus/processing/norm_files/Caco2_norm_file.txt")
+names(caco)[1] <- "Accession"
+huh7 <- read.delim("/home/flomik/Desktop/Code-PHD/Proteomics_virus/data/SARS-2/covid-19_proteomics_norm_file.txt")
+names(huh7)[1] <- "Accession"
+huh7 <- select(huh7, Accession, contains("UNINF"), contains("H48PI"))
+t293 <- read.delim("/home/flomik/Desktop/Code-PHD/Proteomics_virus/processing/norm_files/293T_norm_file.txt")
+names(t293)[1] <- "Accession"
+```
+```{r}
+huh7_new_DGE$logFC <- NA
+```
+
+```{r}
+caco_2 <- merge(caco, caco_DGE, by = "Accession")
+caco_2$logFC <- ifelse(caco_2$adj.P.Val < 0.05, caco_2$logFC, NA)
+huh7_2 <- merge(huh7, huh7_DGE, by = "Accession")
+huh7_2$logFC <- ifelse(huh7_2$adj.P.Val < 0.05, huh7_2$logFC, NA)
+
+t293_2 <- merge(t293, t293_DGE, by = "Accession")
+t293_2$logFC <- ifelse(t293_2$adj.P.Val < 0.05, t293_2$logFC, NA)
+```
+
+```{r}
+#col_fun1 = colorRamp2(c(-2,-1.7,-0.7, 0,0.7,1.7, 2), c("#7F7F00","#B2B200" ,"#E5E500","white","#BF7FBF","#993299","#590059"))
+col_fun2 = colorRamp2(c(-2,  -0.001 ,0,  0.001, 2), c("#263f72", "#b3ccff","white","#ff9999", "#962f2f"))
+```
+
+```{r}
+condition <- c(rep("Mock", 3), rep("24hpi", 3))
+condition <- factor(condition, levels = c("Mock", "24hpi"))
+```
+
+```{r}
+data_heatmap <- huh7_new_DGE
+```
+
+```{r}
+data_heatmap$X <- NULL
+data_heatmap <- data_heatmap[data_heatmap$Pathway != "HIF-1 signaling pathway",]
+data_heatmap_2 <- data_heatmap[data_heatmap$Pathway == "Complement and coagulation cascades",]
+data_heatmap <- data_heatmap[data_heatmap$Pathway != "Complement and coagulation cascades",]
+data_heatmap[,c(2:7)] <- t(scale(t(data_heatmap[,c(2:7)])))
+data_heatmap_2[,c(2:7)] <- t(scale(t(data_heatmap_2[,c(2:7)])))
+min(data_heatmap[,c(2:7)], na.rm = TRUE)
+max(data_heatmap[,c(2:7)], na.rm = TRUE)
+data_heatmap <- data_heatmap[, c(8, 2, 4, 6, 3, 5, 7, 9, 10)]
+data_heatmap_2 <- data_heatmap_2[, c(8, 2, 4, 6, 3, 5, 7, 9, 10)]
+```
+
+```{r}
+names(data_heatmap)
+```
+
+
+```{r}
+rownames(data_heatmap) <- data_heatmap$Gene_name
+rownames(data_heatmap_2) <- data_heatmap_2$Gene_name
+data_heatmap <- data_heatmap[order(data_heatmap$logFC),]
+data_heatmap$Pathway <- factor(data_heatmap$Pathway, levels = c("Glycolysis / Gluconeogenesis", "Fructose and mannose metabolism", "HIF-1 signaling pathway", "Complement and coagulation cascades", "Citrate cycle (TCA cycle)"))
+```
+
+```{r}
+data_heatmap <- data_heatmap[data_heatmap$Gene_name != "GAPDH",]
+```
+
+```{r}
+library(RColorBrewer)
+col = brewer.pal(n = 9, name = "YlOrRd")
+```
+```{r}
+brewer.pal(8, "YlOrRd")
+```
+```{r}
+data_heatmap_2$Extra_1 <- ifelse(data_heatmap_2$Gene_name %in% glycolysis$Gene_name, "Glycolysis / Gluconeogenesis", NA)
+data_heatmap_2$Extra_2 <- ifelse(data_heatmap_2$Gene_name %in% mannose$Gene_name, "Fructose and mannose metabolism", NA)
+data_heatmap_2$Extra_3 <- ifelse(data_heatmap_2$Gene_name %in% tca$Gene_name, "Citrate cycle (TCA cycle)", NA)
+
+data_heatmap_2$Extra_1 <- ifelse(data_heatmap_2$Extra_1 == data_heatmap_2$Pathway, NA, data_heatmap_2$Extra_1)
+data_heatmap_2$Extra_2 <- ifelse(data_heatmap_2$Extra_2 == data_heatmap_2$Pathway, NA, data_heatmap_2$Extra_2)
+data_heatmap_2$Extra_3 <- ifelse(data_heatmap_2$Extra_3 == data_heatmap_2$Pathway, NA, data_heatmap_2$Extra_3)
+```
+```{r}
+data_heatmap$Extra_1 <- ifelse(data_heatmap$Gene_name %in% glycolysis$Gene_name, "Glycolysis / Gluconeogenesis", NA)
+data_heatmap$Extra_2 <- ifelse(data_heatmap$Gene_name %in% mannose$Gene_name, "Fructose and mannose metabolism", NA)
+data_heatmap$Extra_3 <- ifelse(data_heatmap$Gene_name %in% tca$Gene_name, "Citrate cycle (TCA cycle)", NA)
+
+data_heatmap$Extra_1 <- ifelse(data_heatmap$Extra_1 == data_heatmap$Pathway, NA, data_heatmap$Extra_1)
+data_heatmap$Extra_2 <- ifelse(data_heatmap$Extra_2 == data_heatmap$Pathway, NA, data_heatmap$Extra_2)
+data_heatmap$Extra_3 <- ifelse(data_heatmap$Extra_3 == data_heatmap$Pathway, NA, data_heatmap$Extra_3)
+```
+
+```{r}
+pdf("results/figures_covid_ujjwal/Heatmat_covid_new_huh7_cells_coagulation.pdf", width = 9, height = 11)
+ht = Heatmap(as.matrix(data_heatmap_2[,c(2:7)]),
+             col = col,
+             show_row_names = TRUE,
+             show_column_names = FALSE,
+             column_order = colnames(data_heatmap_2[,c(2:7)]),
+             #row_order = rownames(data_heatmap_2),
+             column_split = condition,
+             row_split = data_heatmap_2$Pathway,
+             column_title_gp = gpar(fill = c(rep("white", 2))),
+             border = FALSE,row_title_rot = 0,
+             column_gap = unit(2, "mm"),
+             right_annotation = rowAnnotation(LogFC = data_heatmap_2$logFC, col = list(LogFC = col_fun2))
+            )
+ht
+dev.off()
+```
+```{r}
+col = brewer.pal(n = 6, name = "YlOrRd")
+```
+
+```{r}
+pdf("results/figures_covid_ujjwal/Heatmat_covid_new_huh7_cells.pdf", width = 10, height = 18)
+ht = Heatmap(as.matrix(data_heatmap[,c(2:7)]),
+             col = col,
+             show_row_names = TRUE,
+             show_column_names = FALSE,
+             column_order = colnames(data_heatmap[,c(2:7)]),
+             #row_order = rownames(data_heatmap),
+             column_split = condition,
+             row_split = data_heatmap$Pathway,
+             column_title_gp = gpar(fill = c(rep("white", 2))),
+             #row_title_gp = gpar(fill = c(rep("white", 4))),
+             border = FALSE,row_title_rot = 0,
+             column_gap = unit(2, "mm"),
+             right_annotation = rowAnnotation(LogFC = data_heatmap$logFC, Overlap = data_heatmap$Extra_1, col = list(LogFC = col_fun2))
+             )
+ht
+dev.off()
+```
+
+```{r}
+condition <- c(rep("Mock", 3), rep("24hpi", 3))
+condition <- factor(condition, levels = c("Mock", "24hpi"))
+```
+
+```{r}
+data_heatmap <- t293_2
+```
+
+```{r}
+data_heatmap$X <- NULL
+data_heatmap <- data_heatmap[data_heatmap$Pathway != "HIF-1 signaling pathway",]
+data_heatmap_2 <- data_heatmap[data_heatmap$Pathway == "Complement and coagulation cascades",]
+data_heatmap <- data_heatmap[data_heatmap$Pathway != "Complement and coagulation cascades",]
+data_heatmap[,c(2:7)] <- t(scale(t(data_heatmap[,c(2:7)])))
+data_heatmap_2[,c(2:7)] <- t(scale(t(data_heatmap_2[,c(2:7)])))
+min(data_heatmap[,c(2:7)], na.rm = TRUE)
+max(data_heatmap[,c(2:7)], na.rm = TRUE)
+data_heatmap <- data_heatmap[, c(8, 2, 4, 6, 3, 5, 7, 9, 11)]
+data_heatmap_2 <- data_heatmap_2[, c(8, 2, 4, 6, 3, 5, 7, 9, 11)]
+```
+
+```{r}
+names(data_heatmap)
+```
+
+
+```{r}
+rownames(data_heatmap) <- data_heatmap$Gene_name
+rownames(data_heatmap_2) <- data_heatmap_2$Gene_name
+data_heatmap <- data_heatmap[order(data_heatmap$logFC),]
+data_heatmap$Pathway <- factor(data_heatmap$Pathway, levels = c("Glycolysis / Gluconeogenesis", "Fructose and mannose metabolism", "HIF-1 signaling pathway", "Complement and coagulation cascades", "Citrate cycle (TCA cycle)"))
+```
+
+```{r}
+data_heatmap <- data_heatmap[data_heatmap$Gene_name != "GAPDH",]
+```
+
+```{r}
+library(RColorBrewer)
+col = brewer.pal(n = 9, name = "YlOrRd")
+```
+```{r}
+brewer.pal(8, "YlOrRd")
+```
+```{r}
+data_heatmap_2$Extra_1 <- ifelse(data_heatmap_2$Gene_name %in% glycolysis$Gene_name, "Glycolysis / Gluconeogenesis", NA)
+data_heatmap_2$Extra_2 <- ifelse(data_heatmap_2$Gene_name %in% mannose$Gene_name, "Fructose and mannose metabolism", NA)
+data_heatmap_2$Extra_3 <- ifelse(data_heatmap_2$Gene_name %in% tca$Gene_name, "Citrate cycle (TCA cycle)", NA)
+
+data_heatmap_2$Extra_1 <- ifelse(data_heatmap_2$Extra_1 == data_heatmap_2$Pathway, NA, data_heatmap_2$Extra_1)
+data_heatmap_2$Extra_2 <- ifelse(data_heatmap_2$Extra_2 == data_heatmap_2$Pathway, NA, data_heatmap_2$Extra_2)
+data_heatmap_2$Extra_3 <- ifelse(data_heatmap_2$Extra_3 == data_heatmap_2$Pathway, NA, data_heatmap_2$Extra_3)
+```
+```{r}
+data_heatmap$Extra_1 <- ifelse(data_heatmap$Gene_name %in% glycolysis$Gene_name, "Glycolysis / Gluconeogenesis", NA)
+data_heatmap$Extra_2 <- ifelse(data_heatmap$Gene_name %in% mannose$Gene_name, "Fructose and mannose metabolism", NA)
+data_heatmap$Extra_3 <- ifelse(data_heatmap$Gene_name %in% tca$Gene_name, "Citrate cycle (TCA cycle)", NA)
+
+data_heatmap$Extra_1 <- ifelse(data_heatmap$Extra_1 == data_heatmap$Pathway, NA, data_heatmap$Extra_1)
+data_heatmap$Extra_2 <- ifelse(data_heatmap$Extra_2 == data_heatmap$Pathway, NA, data_heatmap$Extra_2)
+data_heatmap$Extra_3 <- ifelse(data_heatmap$Extra_3 == data_heatmap$Pathway, NA, data_heatmap$Extra_3)
+```
+
+```{r}
+pdf("results/figures_covid_ujjwal/Heatmat_covid_293T_cells_coagulation.pdf", width = 9, height = 11)
+ht = Heatmap(as.matrix(data_heatmap_2[,c(2:7)]),
+             col = col,
+             show_row_names = TRUE,
+             show_column_names = FALSE,
+             column_order = colnames(data_heatmap_2[,c(2:7)]),
+             #row_order = rownames(data_heatmap_2),
+             column_split = condition,
+             row_split = data_heatmap_2$Pathway,
+             column_title_gp = gpar(fill = c(rep("white", 2))),
+             border = FALSE,row_title_rot = 0,
+             column_gap = unit(2, "mm"),
+             right_annotation = rowAnnotation(LogFC = data_heatmap_2$logFC, col = list(LogFC = col_fun2))
+            )
+ht
+dev.off()
+```
+```{r}
+col = brewer.pal(n = 6, name = "YlOrRd")
+```
+
+```{r}
+pdf("results/figures_covid_ujjwal/Heatmat_covid_293T_cells.pdf", width = 10, height = 18)
+ht = Heatmap(as.matrix(data_heatmap[,c(2:7)]),
+             col = col,
+             show_row_names = TRUE,
+             show_column_names = FALSE,
+             column_order = colnames(data_heatmap[,c(2:7)]),
+             #row_order = rownames(data_heatmap),
+             column_split = condition,
+             row_split = data_heatmap$Pathway,
+             column_title_gp = gpar(fill = c(rep("white", 2))),
+             #row_title_gp = gpar(fill = c(rep("white", 4))),
+             border = FALSE,row_title_rot = 0,
+             column_gap = unit(2, "mm"),
+             right_annotation = rowAnnotation(LogFC = data_heatmap$logFC, Overlap = data_heatmap$Extra_1, col = list(LogFC = col_fun2))
+             )
+ht
+dev.off()
+```
+
+
+```{r}
+condition <- c(rep("Mock", 3), rep("24hpi", 3))
+condition <- factor(condition, levels = c("Mock", "24hpi"))
+```
+
+```{r}
+data_heatmap <- caco_2
+```
+
+```{r}
+data_heatmap$X <- NULL
+data_heatmap <- data_heatmap[data_heatmap$Pathway != "HIF-1 signaling pathway",]
+data_heatmap_2 <- data_heatmap[data_heatmap$Pathway == "Complement and coagulation cascades",]
+data_heatmap <- data_heatmap[data_heatmap$Pathway != "Complement and coagulation cascades",]
+data_heatmap[,c(2:7)] <- t(scale(t(data_heatmap[,c(2:7)])))
+data_heatmap_2[,c(2:7)] <- t(scale(t(data_heatmap_2[,c(2:7)])))
+min(data_heatmap[,c(2:7)], na.rm = TRUE)
+max(data_heatmap[,c(2:7)], na.rm = TRUE)
+data_heatmap <- data_heatmap[, c(8, 2, 4, 6, 3, 5, 7, 9, 11)]
+data_heatmap_2 <- data_heatmap_2[, c(8, 2, 4, 6, 3, 5, 7, 9, 11)]
+```
+```{r}
+names(data_heatmap)
+```
+
+
+```{r}
+rownames(data_heatmap) <- data_heatmap$Gene_name
+rownames(data_heatmap_2) <- data_heatmap_2$Gene_name
+data_heatmap <- data_heatmap[order(data_heatmap$logFC),]
+data_heatmap$Pathway <- factor(data_heatmap$Pathway, levels = c("Glycolysis / Gluconeogenesis", "Fructose and mannose metabolism", "HIF-1 signaling pathway", "Complement and coagulation cascades", "Citrate cycle (TCA cycle)"))
+```
+
+```{r}
+data_heatmap <- data_heatmap[data_heatmap$Gene_name != "GAPDH",]
+```
+
+```{r}
+library(RColorBrewer)
+col = brewer.pal(n = 9, name = "YlOrRd")
+```
+```{r}
+brewer.pal(8, "YlOrRd")
+```
+```{r}
+data_heatmap_2$Extra_1 <- ifelse(data_heatmap_2$Gene_name %in% glycolysis$Gene_name, "Glycolysis / Gluconeogenesis", NA)
+data_heatmap_2$Extra_2 <- ifelse(data_heatmap_2$Gene_name %in% mannose$Gene_name, "Fructose and mannose metabolism", NA)
+data_heatmap_2$Extra_3 <- ifelse(data_heatmap_2$Gene_name %in% tca$Gene_name, "Citrate cycle (TCA cycle)", NA)
+
+data_heatmap_2$Extra_1 <- ifelse(data_heatmap_2$Extra_1 == data_heatmap_2$Pathway, NA, data_heatmap_2$Extra_1)
+data_heatmap_2$Extra_2 <- ifelse(data_heatmap_2$Extra_2 == data_heatmap_2$Pathway, NA, data_heatmap_2$Extra_2)
+data_heatmap_2$Extra_3 <- ifelse(data_heatmap_2$Extra_3 == data_heatmap_2$Pathway, NA, data_heatmap_2$Extra_3)
+```
+```{r}
+data_heatmap$Extra_1 <- ifelse(data_heatmap$Gene_name %in% glycolysis$Gene_name, "Glycolysis / Gluconeogenesis", NA)
+data_heatmap$Extra_2 <- ifelse(data_heatmap$Gene_name %in% mannose$Gene_name, "Fructose and mannose metabolism", NA)
+data_heatmap$Extra_3 <- ifelse(data_heatmap$Gene_name %in% tca$Gene_name, "Citrate cycle (TCA cycle)", NA)
+
+data_heatmap$Extra_1 <- ifelse(data_heatmap$Extra_1 == data_heatmap$Pathway, NA, data_heatmap$Extra_1)
+data_heatmap$Extra_2 <- ifelse(data_heatmap$Extra_2 == data_heatmap$Pathway, NA, data_heatmap$Extra_2)
+data_heatmap$Extra_3 <- ifelse(data_heatmap$Extra_3 == data_heatmap$Pathway, NA, data_heatmap$Extra_3)
+```
+
+```{r}
+pdf("results/figures_covid_ujjwal/Heatmat_covid_caco2_cells_coagulation.pdf", width = 9, height = 11)
+ht = Heatmap(as.matrix(data_heatmap_2[,c(2:7)]),
+             col = col,
+             show_row_names = TRUE,
+             show_column_names = FALSE,
+             column_order = colnames(data_heatmap_2[,c(2:7)]),
+             #row_order = rownames(data_heatmap_2),
+             column_split = condition,
+             row_split = data_heatmap_2$Pathway,
+             column_title_gp = gpar(fill = c(rep("white", 2))),
+             border = FALSE,row_title_rot = 0,
+             column_gap = unit(2, "mm"),
+             right_annotation = rowAnnotation(LogFC = data_heatmap_2$logFC, col = list(LogFC = col_fun2))
+            )
+ht
+dev.off()
+```
+```{r}
+col = brewer.pal(n = 6, name = "YlOrRd")
+```
+
+```{r}
+pdf("results/figures_covid_ujjwal/Heatmat_covid_caco2_cells.pdf", width = 10, height = 18)
+ht = Heatmap(as.matrix(data_heatmap[,c(2:7)]),
+             col = col,
+             show_row_names = TRUE,
+             show_column_names = FALSE,
+             column_order = colnames(data_heatmap[,c(2:7)]),
+             #row_order = rownames(data_heatmap),
+             column_split = condition,
+             row_split = data_heatmap$Pathway,
+             column_title_gp = gpar(fill = c(rep("white", 2))),
+             #row_title_gp = gpar(fill = c(rep("white", 4))),
+             border = FALSE,row_title_rot = 0,
+             column_gap = unit(2, "mm"),
+             right_annotation = rowAnnotation(LogFC = data_heatmap$logFC, Overlap = data_heatmap$Extra_1, col = list(LogFC = col_fun2))
+             )
+ht
+dev.off()
+```
+
+
+```{r}
+data_heatmap <- huh7_2
+```
+
+```{r}
+condition <- c(rep("Mock", 3), rep("48hpi", 3))
+condition <- factor(condition, levels = c("Mock", "48hpi"))
+```
+
+```{r}
+data_heatmap$X <- NULL
+data_heatmap <- data_heatmap[data_heatmap$Pathway != "HIF-1 signaling pathway",]
+data_heatmap_2 <- data_heatmap[data_heatmap$Pathway == "Complement and coagulation cascades",]
+data_heatmap <- data_heatmap[data_heatmap$Pathway != "Complement and coagulation cascades",]
+data_heatmap[,c(2:7)] <- t(scale(t(data_heatmap[,c(2:7)])))
+data_heatmap_2[,c(2:7)] <- t(scale(t(data_heatmap_2[,c(2:7)])))
+min(data_heatmap[,c(2:7)], na.rm = TRUE)
+max(data_heatmap[,c(2:7)], na.rm = TRUE)
+#data_heatmap <- data_heatmap[, c(8, 2, 4, 6, 3, 5, 7, 9, 11)]
+#data_heatmap_2 <- data_heatmap_2[, c(8, 2, 4, 6, 3, 5, 7, 9, 11)]
+```
+```{r}
+names(data_heatmap)
+```
+
+
+```{r}
+rownames(data_heatmap) <- data_heatmap$Gene_name
+rownames(data_heatmap_2) <- data_heatmap_2$Gene_name
+#data_heatmap <- data_heatmap[order(data_heatmap$logFC),]
+#data_heatmap$Pathway <- factor(data_heatmap$Pathway, levels = c("Glycolysis / Gluconeogenesis", "Fructose and mannose metabolism", "HIF-1 signaling pathway", "Complement and coagulation cascades", #"Citrate cycle (TCA cycle)"))
+```
+
+```{r}
+data_heatmap <- data_heatmap[data_heatmap$Gene_name != "GAPDH",]
+```
+
+```{r}
+library(RColorBrewer)
+col = brewer.pal(n = 9, name = "YlOrRd")
+```
+```{r}
+brewer.pal(8, "YlOrRd")
+```
+```{r}
+data_heatmap_2$Extra_1 <- ifelse(data_heatmap_2$Gene_name %in% glycolysis$Gene_name, "Glycolysis / Gluconeogenesis", NA)
+data_heatmap_2$Extra_2 <- ifelse(data_heatmap_2$Gene_name %in% mannose$Gene_name, "Fructose and mannose metabolism", NA)
+data_heatmap_2$Extra_3 <- ifelse(data_heatmap_2$Gene_name %in% tca$Gene_name, "Citrate cycle (TCA cycle)", NA)
+
+data_heatmap_2$Extra_1 <- ifelse(data_heatmap_2$Extra_1 == data_heatmap_2$Pathway, NA, data_heatmap_2$Extra_1)
+data_heatmap_2$Extra_2 <- ifelse(data_heatmap_2$Extra_2 == data_heatmap_2$Pathway, NA, data_heatmap_2$Extra_2)
+data_heatmap_2$Extra_3 <- ifelse(data_heatmap_2$Extra_3 == data_heatmap_2$Pathway, NA, data_heatmap_2$Extra_3)
+```
+```{r}
+data_heatmap$Extra_1 <- ifelse(data_heatmap$Gene_name %in% glycolysis$Gene_name, "Glycolysis / Gluconeogenesis", NA)
+data_heatmap$Extra_2 <- ifelse(data_heatmap$Gene_name %in% mannose$Gene_name, "Fructose and mannose metabolism", NA)
+data_heatmap$Extra_3 <- ifelse(data_heatmap$Gene_name %in% tca$Gene_name, "Citrate cycle (TCA cycle)", NA)
+
+data_heatmap$Extra_1 <- ifelse(data_heatmap$Extra_1 == data_heatmap$Pathway, NA, data_heatmap$Extra_1)
+data_heatmap$Extra_2 <- ifelse(data_heatmap$Extra_2 == data_heatmap$Pathway, NA, data_heatmap$Extra_2)
+data_heatmap$Extra_3 <- ifelse(data_heatmap$Extra_3 == data_heatmap$Pathway, NA, data_heatmap$Extra_3)
+```
+
+```{r}
+pdf("results/figures_covid_ujjwal/Heatmat_covid_huh7_cells_coagulation.pdf", width = 9, height = 11)
+ht = Heatmap(as.matrix(data_heatmap_2[,c(2:7)]),
+             col = col,
+             show_row_names = TRUE,
+             show_column_names = FALSE,
+             column_order = colnames(data_heatmap_2[,c(2:7)]),
+             #row_order = rownames(data_heatmap_2),
+             column_split = condition,
+             row_split = data_heatmap_2$Pathway,
+             column_title_gp = gpar(fill = c(rep("white", 2))),
+             border = FALSE,row_title_rot = 0,
+             column_gap = unit(2, "mm"),
+             right_annotation = rowAnnotation(LogFC = data_heatmap_2$logFC, col = list(LogFC = col_fun2))
+            )
+ht
+dev.off()
+```
+```{r}
+col = brewer.pal(n = 6, name = "YlOrRd")
+```
+
+```{r}
+pdf("results/figures_covid_ujjwal/Heatmat_covid_huh7_cells.pdf", width = 10, height = 18)
+ht = Heatmap(as.matrix(data_heatmap[,c(2:7)]),
+             col = col,
+             show_row_names = TRUE,
+             show_column_names = FALSE,
+             column_order = colnames(data_heatmap[,c(2:7)]),
+             #row_order = rownames(data_heatmap),
+             column_split = condition,
+             row_split = data_heatmap$Pathway,
+             column_title_gp = gpar(fill = c(rep("white", 2))),
+             #row_title_gp = gpar(fill = c(rep("white", 4))),
+             border = FALSE,row_title_rot = 0,
+             column_gap = unit(2, "mm"),
+             right_annotation = rowAnnotation(LogFC = data_heatmap$logFC, Overlap = data_heatmap$Extra_1, col = list(LogFC = col_fun2))
+             )
+ht
+dev.off()
+```

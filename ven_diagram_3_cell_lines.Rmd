@@ -1,0 +1,250 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+
+
+### clean environment
+```{r}
+rm(list=ls())
+```
+
+### set directory
+```{r setup}
+    knitr::opts_knit$set(root.dir = normalizePath("~/Desktop/Code-PHD/Proteomics_virus/")) 
+```
+
+```{r}
+library(ggplot2)
+library(xlsx)
+```
+
+
+## load data
+```{r}
+caco_DGE <- read.xlsx("/home/flomik/Desktop/Code-PHD/Proteomics_virus/results/Caco2/DGE/Caco2_R2_Caco2_U_vs_R2_Caco2_T_DGE_results_filt.xlsx", 1)
+calu_DGE <- read.xlsx("/home/flomik/Desktop/Code-PHD/Proteomics_virus/results/Calu3/DGE/Calu3_R2_Calu3_U_vs_R2_Calu3_T_DGE_results_filt.xlsx", 1)
+huh7_DGE_2 <- read.xlsx("/home/flomik/Desktop/Code-PHD/Proteomics_virus/results/Huh7/DGE/Huh7_R1_Huh7_U_vs_R1_Huh7_T_DGE_results_filt.xlsx", 1)
+huh7_DGE_1 <- read.xlsx("/home/flomik/Desktop/Code-PHD/Proteomics_virus/data/SARS-2/covid-19_proteomics_UNINF_vs_H48PI_DGE_results_filt.xlsx",1)
+```
+
+```{r}
+n_293 <- 0
+n_caco <- nrow(caco_DGE)
+n_calu <- nrow(calu_DGE)
+n_huh7_1 <- nrow(huh7_DGE_1)
+n_huh7_2 <- 4
+```
+
+```{r}
+data_bubble <- data.frame(Cell_line = c("239T 24h", "Caco2 24h", "Calu3 24h", "Huh7 24h", "Huh7 48h"), Nb = c(n_293, n_caco, n_calu, n_huh7_2, n_huh7_1), mar = 1)
+```
+
+
+## bubbles nb of genes
+```{r}
+colors <- c("#ffb3ba", "#ffdfba", "#baffc9", "#bae1ff", "#66879d")
+```
+
+```{r}
+position <- data_bubble$Cell_line
+```
+
+```{r}
+a <- ggplot(data_bubble, aes(x = Cell_line, y = mar, size = Nb, fill = Cell_line))+ geom_point(shape = 21)+
+  labs(size ="Number of proteins")+ scale_x_discrete(limits = position, position = "top")+theme_light()+ scale_fill_manual(values=colors) +
+    scale_size_continuous(range = c(1, 15))+ theme(legend.title = element_blank(), legend.position = "none", axis.line=element_blank(),axis.text.y=element_blank(),axis.ticks=element_blank(),
+          axis.title.x=element_blank(),
+          axis.title.y=element_blank(),
+          panel.background=element_blank(),panel.border=element_blank(),panel.grid.major=element_blank(),
+          panel.grid.minor=element_blank(),plot.background=element_blank(), axis.text.x = element_text(size=15, color = "black"))+ylim(c(0.9,1))
+ggsave("results/figures/cell_lines/Bubble_plot_nb_proteins_DGE.pdf")
+```
+## ven diagram
+```{r}
+up_caco <- caco_DGE$Gene_name[caco_DGE$logFC > 0]
+up_calu <- calu_DGE$Gene_name[calu_DGE$logFC > 0]
+up_huh7 <- huh7_DGE_1$Gene_name[huh7_DGE_1$logFC > 0]
+```
+
+```{r}
+down_caco <- caco_DGE$Gene_name[caco_DGE$logFC < 0]
+down_calu <- calu_DGE$Gene_name[calu_DGE$logFC < 0]
+down_huh7 <- huh7_DGE_1$Gene_name[huh7_DGE_1$logFC < 0]
+```
+
+```{r}
+write.xlsx(up_caco, file="processing/prot_up.xlsx", sheetName="up_caco", row.names=FALSE)
+write.xlsx(up_calu, file="processing/prot_up.xlsx", sheetName="up_calu", append=TRUE, row.names=FALSE)
+write.xlsx(up_huh7, file="processing/prot_up.xlsx", sheetName="up_huh7", append=TRUE, row.names=FALSE)
+```
+
+
+```{r}```{r}
+
+write.xlsx(down_caco, file="processing/prot_down.xlsx", sheetName="down_caco", row.names=FALSE)
+write.xlsx(down_calu, file="processing/prot_down.xlsx", sheetName="down_calu", append=TRUE, row.names=FALSE)
+write.xlsx(down_huh7, file="processing/prot_down.xlsx", sheetName="down_huh7", append=TRUE, row.names=FALSE)
+```
+
+
+## ven diagram 3 cell lines
+```{r}
+library(eulerr)
+```
+```{r}
+pdf("results/figures/cell_lines/ven_diagram_3_cell_lines_all_proteins.pdf")
+VennDiag <- euler(c("Huh7" = 1347, "Caco2" = 38, "Calu3"= 3897,
+                     "Huh7&Calu3" = 2433, "Calu3&Caco2" = 90,"Caco2&Huh7" = 90,
+                    "Huh7&Caco2&Calu3" = 42))
+plot(VennDiag, counts = TRUE, font=1, cex=1, alpha=0.5,
+     fill=c("#66879d","#ffdfba", "#baffc9"), quantities = TRUE)
+dev.off()
+```
+## heatmaps IFN
+```{r}
+ifn <- read.csv("processing/list_overlap_IFN_caco_calu_reactome.csv")
+ifn <- data.frame(t(ifn))
+ifn <- as.vector(ifn$t.ifn.)
+ifn <- ifn[-1]
+```
+```{r}
+ifn <- c(ifn, "DDX58", "ISG15", "IFIT1", "STAT1", "STAT2", "IFI35")
+```
+
+## heatmap logFC
+```{r}
+caco <- caco_DGE[caco_DGE$Gene_name %in% ifn, ]
+names(caco)[4] <- "logFC_Caco2"
+caco <- caco[,c(2,3,4)]
+
+
+calu <- calu_DGE[calu_DGE$Gene_name %in% ifn, ]
+names(calu)[4] <- "logFC_Calu3"
+calu <- calu[,c(2,4)]
+
+
+
+huh7 <- huh7_DGE_1[huh7_DGE_1$Gene_name %in% ifn, ]
+names(huh7)[4] <- "logFC_Huh7"
+huh7 <- huh7[,c(2,4)]
+```
+
+```{r}
+data_heatmap <- merge(caco, calu, by = "Accession", all.x = TRUE, all.y = TRUE)
+data_heatmap <- merge(data_heatmap, huh7, by = "Accession", all.x = TRUE, all.y = TRUE)
+rownames(data_heatmap) <- data_heatmap$Gene_name
+```
+
+
+```{r}
+library(circlize)
+library(ComplexHeatmap)
+col_fun1 = colorRamp2(c(-2,-1.7,-0.7, 0,0.7,1.7, 2), c("#7F7F00","#B2B200" ,"#E5E500","white","#BF7FBF","#993299","#590059"))
+col_fun2 = colorRamp2(c(-2,  -0.1 ,0,  0.5, 3.1), c("#007f7f", "#00cccc","white","#ff0000", "#cc0000"))
+```
+
+```{r}
+data_heatmap <- data_heatmap[order(data_heatmap$logFC_Caco2),]
+```
+
+```{r}
+pdf("results/figures/cell_lines/Heatmat_comparisons_cell_lines_ifn_foldchange.pdf", width = 2.5, height = 7)
+ht = Heatmap(as.matrix(data_heatmap[,-c(1,2)]),
+             column_order = colnames(data_heatmap)[-c(1,2)],
+             row_order = rownames(data_heatmap),
+             col = col_fun2,
+             row_title_rot = 0
+             )
+ht
+dev.off()
+```
+## dot plot
+```{r}
+test <- data_heatmap
+```
+
+```{r}
+names(test)
+```
+```{r}
+test <- test[,c(2, 3, 4, 5)]
+```
+
+
+```{r}
+library(reshape2)
+```
+
+```{r}
+test_2 <- melt(test, id.vars = c("Gene_name"))
+```
+
+
+```{r}
+n <- 24
+```
+
+```{r}
+test_2$position <- c(paste0("C",rep(1, n)),paste0("C",rep(2, n)), paste0("C",rep(3, n)))
+```
+
+```{r}
+names(test_2)
+```
+```{r}
+test_2$group <- rep(paste0("G", c(1:n), 3))
+```
+```{r}
+test_2$sign <- ifelse(test_2$value > 0 , "up", "down")
+```
+
+```{r}
+test_2$value <- ifelse(test_2$value > 0, test_2$value, test_2$value*-1)
+```
+
+```{r}
+position_2 <- rev(rownames(data_heatmap))
+```
+```{r}
+names(test_2)
+```
+```{r}
+test_2$group <- ifelse(is.na(test_2$value), NA, test_2$group)
+test_2$position <- ifelse(is.na(test_2$value), NA, test_2$position)
+```
+
+
+## remove lines
+```{r}
+list_diff_caco_calu <- c("B2M", "PML", "HLA−E", "HLA−B")
+```
+
+```{r}
+list_diff_caco_huh7 <- c("IFI35")
+```
+
+```{r}
+test_3 <- test_2[test_2$Gene_name %in% list_diff_caco_calu,]
+```
+
+```{r}
+test_2$group_2 <- NA
+test_2$group_2[test_2$Gene_name %in% list_diff_caco_calu] <- c("1", "2", "1", "2", NA, NA)
+```
+
+```{r}
+#pdf("results/figures/cell_lines/dot_plot_comparisons_cell_lines_ifn_foldchange.pdf", height = 7, width = 2)
+a <- ggplot(test_2, aes(x = position, y = Gene_name, group = group))+ scale_x_discrete(labels=c("C1" = "Caco2","C2" = "Calu3","C3" = "Huh7"))+ theme_minimal()+ geom_point(size = 2.5)+ 
+  labs(title="", x="", y="", fill="") + scale_y_discrete(limits = position_2)+ theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+ 
+  scale_size_continuous(range = c(0, 7))+ geom_line(color = "black")
+a <- a + coord_cartesian(xlim = c(0, 3.5), expand = FALSE, ylim = c(0, 26))
+#a <- a + geom_line(test_2, mapping = aes(x = position, y = Gene_name, group = group_2), color = "pink")
+#a
+#dev.off()
+a
+ggsave("results/figures/cell_lines/dot_plot_comparisons_cell_lines_ifn_foldchange.pdf", height = 7, width = 2)
+```
+

@@ -1,0 +1,35 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+library(ComplexHeatmap)
+```
+```{r}
+library(circlize)
+```
+
+
+## heatmap cell lines
+```{r}
+mat <- matrix(c(0, 177, 6462, 4), ncol = 4, nrow = 1)
+```
+
+column_title = c("Calu3", "Caco2", "298FT", "Huh7")
+
+```{r}
+col_fun = colorRamp2(c(0, 4, 177, 6462), c("#ffffff","#e0b7b7","#991111","#4c0808"))
+```
+
+```{r}
+pdf("Heatmap_cell_lines", width = 6, height = 2)
+draw(Heatmap(mat, 
+        column_order = colnames(mat),
+        column_title = c("Calu3", "Caco2", "298FT", "Huh7"),
+        column_split = c("Calu3", "Caco2", "298FT", "Huh7"),
+        col = col_fun, border = TRUE), show_heatmap_legend=FALSE)
+dev.off()
+```
+

@@ -1,0 +1,336 @@
+---
+title: "Proteomics cell lines"
+output: html_notebook
+---
+
+### clean environment
+```{r}
+rm(list=ls())
+```
+
+### set directory
+```{r setup}
+    knitr::opts_knit$set(root.dir = normalizePath("~/Desktop/Code-PHD/Proteomics_virus/")) 
+```
+
+```{r}
+library(ggplot2)
+library(limma)
+library(dplyr)
+library(xlsx)
+library(RColorBrewer)
+library(gplots)
+library(ggrepel)
+library(knitr)
+library(ggfortify)
+library(NormalyzerDE)
+library(ropls)
+library(stringr)
+opts_chunk$set(echo = TRUE)
+options(bitmapType="cairo")
+```
+
+```{r}
+source("src/usefull_functions.R")
+```
+
+```{r}
+input_1 <- "data/Cell_lines/293T_Huh7_TMTpro_12Fractions.csv"
+input_2 <- "data/Cell_lines/Calu2_Caco3_TMTpro_12Fractions_2.csv"
+n <- 3
+```
+
+
+
+## 1) Pre-processing
+
+## file 1
+
+```{r}
+name_ana <- "Calu3"
+```
+```{r}
+dir.create(paste0("processing/", name_ana))
+dir.create(paste0("results/", name_ana))
+dir.create(paste0("results/", name_ana, "/figures"))
+dir.create(paste0("results/", name_ana, "/GSEA"))
+dir.create(paste0("results/", name_ana, "/DGE"))
+```
+
+```{r}
+data <- read.csv(input_2)
+data$Description <- NULL
+data <- data[,1:7]
+samples <- data.frame(names = colnames(data)[-1], condition = NA, names_2 = NA)
+samples$condition <- c("R2_Calu3_U","R2_Calu3_T", "R2_Calu3_U","R2_Calu3_T","R2_Calu3_U","R2_Calu3_T")
+samples$names_2 <- paste0(samples$condition, c(rep(1,2), rep(2,2), rep(3,2))) ## extract run number
+samples
+
+condition <- samples$condition
+
+colnames(data)[-1] <- samples$names_2
+rownames(data) <- data$Accession
+data$Accession <- NULL
+```
+
+## Make annotation_info_file
+```{r}
+annotationInfo <- read.delim("data/annotationInfo_Uniprot_gene_name")
+names(annotationInfo)[1] <- "Accession"
+```
+
+## select Abundances columns
+```{r}
+print(nrow(data))
+data <- data[rowSums(is.na(data)) != ncol(data), ] ## remove empty lines
+data_trash <- data[!complete.cases(data),]
+data <- data[complete.cases(data),]
+print(nrow(data))
+```
+## save files
+```{r}
+save_file_csv(data, "row_data_filt", paste0("processing/", name_ana, "/"))
+
+save_file_csv(samples, "informations", paste0("processing/", name_ana, "/"))
+```
+
+### check for missing values
+```{r}
+counts <- 1:nrow(data) # create vector of appropriate length
+for(i in 1:nrow(data)){
+    # TRUE will be coerced to 1 for the summing
+    counts[i] <- sum(is.na(data[i,]))
+}
+table(counts) # create the summary
+```
+### distribution
+```{r}
+data_2 <-as.matrix(data)
+hist(data_2 , prob=T)
+curve(dnorm(x,mean(data_2),sd(data_2)),add=T,col="red")
+save_figure(data_2, "distribution_", 10, 10)
+```
+
+
+### PCA before norm
+```{r}
+pca_data <- data.frame(group = condition, 
+                       t(as.matrix(data)))
+```
+
+```{r}
+pca_data[is.na(pca_data)] <-  0
+pca <- prcomp(pca_data[,-1])
+```
++  scale_fill_manual(values = c(c_c2, c_c1))
+```{r}
+a <- autoplot(pca, data = pca_data, size= 3, shape = 21, fill = 'group')+theme_gray()
+print(a)
+save_figure(a, "pca_before_norm_", 4, 4)
+```
+
+
+### Quantile normalization
+
+```{r}
+path_data <- make_data_matrix(data, name_ana)
+path_design <-make_design_matrix(data, name_ana, condition)
+outDir <- "processing/normalization"
+```
+
+```{r}
+#normalyzer(jobName=name_ana, designPath=path_design, dataPath=path_data, outputDir=outDir)
+```
+```{r}
+path_results_norm <- paste0(outDir, "/", name_ana,"/Quantile-normalized.txt")
+data_norm <- read.delim(path_results_norm)
+rownames(data_norm) <- rownames(data)
+
+path_results <- paste0("processing/norm_files/", name_ana, "_norm_file.txt")
+
+write.table(data_norm, file = path_results, 
+            sep = "\t", row.names = TRUE, col.names = NA)
+```
+
+### PCA after normalization
+```{r}
+pca_data <- data.frame(group = condition, t(as.matrix(data_norm)))
+```
+
+```{r}
+pca_data[is.na(pca_data)] <-  0
+pca <- prcomp(pca_data[,-1])
+```
++ scale_fill_manual(values = c(c_c2, c_c1))
+```{r}
+b <- autoplot(pca, data = pca_data, size= 3, shape = 21, fill = 'group')+theme_gray()
+print(b)
+save_figure(b, "pca_after_norm_", 4, 4)
+```
+
+```{r}
+#c <- autoplot(pca, data = pca_data, size= 6, fill = 'group', label = TRUE, label.size = 3, shape = FALSE)+theme_gray()
+#print(c)
+#save_figure(c, "pca_after_norm_label", 4, 4)
+```
+
+### distribution after normalization
+```{r}
+#data_2 <-as.matrix(data_norm)
+#hist(data_2 , prob=T)
+#curve(dnorm(x,mean(data_2),sd(data_2)),add=T,col="red")
+#save_figure(data_2, "distribution_", 10, 10)
+```
+## Multiple comparisons
+
+## four time points experiments = 
+
+## set levels
+```{r}
+groups <- as.factor(condition)
+design <- model.matrix( ~ 0 + groups)
+colnames(design) <- levels(groups)
+```
+
+## fit model
+```{r}
+fit <- lmFit(data_norm, design)
+```
+
+
+```{r}
+list_comp <- c("R2_Calu3_T-R2_Calu3_U")
+```
+
+```{r}
+head(data_norm)
+```
+```{r}
+viral_proteins <- c("P0DTC2", "P0DTC3", "P0DTC5", "P0DTC6", "P0DTC7", "P0DTC8", "P0DTC9", "P0DTD1", "P0DTD2")
+```
+
+```{r}
+length(viral_proteins[viral_proteins %in% rownames(data_norm)])
+```
+```{r}
+data_virus <- data_norm[rownames(data_norm) %in% viral_proteins,]
+```
+
+```{r}
+data_virus_2 <- data.frame(Proteins = rownames(data_virus),
+                           S1 = data_virus[,2] - data_virus[,1],
+                           S2 = data_virus[,4] - data_virus[,3],
+                           S3 = data_virus[,6] - data_virus[,5])
+```
+```{r}
+library(reshape2)
+data_virus_2 <- melt(data_virus_2, by = "Proteins")
+```
+```{r}
+pdf("results/virus_levels/Calu3_virus_levels_difference.pdf")
+a<- ggplot(data_virus_2, aes(x=Proteins, y=value, fill = "#1F78B4"))+
+  geom_bar(stat="identity", position=position_dodge())+
+  scale_fill_manual(values =c("#1F78B4"))+ theme_minimal()+ 
+  theme(legend.position = "none", legend.title=element_text(size=8),legend.text=element_text(size=8),
+        legend.key.size=unit(0.7,"line"),plot.title = element_text(hjust = 0.5),
+        axis.title.y=element_text(size=15, color = "black"),axis.title.x=element_text(size=10, color = "black"),
+        axis.text.y=element_text(size=12, color = "black"),axis.text.x=element_text(size=10, color = "black"))
+a
+dev.off()
+```
+```{r}
+data_virus_2$Cell_line <- name_ana
+write.csv(data_virus_2, paste0("results/virus_levels/", name_ana, "differences_viral_proteins.csv"))
+```
+
+```{r}
+
+data_virus <- data.frame(condition = condition, t(data_virus))
+data_virus <- melt(data_virus, by = "condition")
+```
+```{r}
+#+++++++++++++++++++++++++
+# Function to calculate the mean and the standard deviation
+  # for each group
+#+++++++++++++++++++++++++
+# data : a data frame
+# varname : the name of a column containing the variable
+  #to be summariezed
+# groupnames : vector of column names to be used as
+  # grouping variables
+data_summary <- function(data, varname, groupnames){
+  require(plyr)
+  summary_func <- function(x, col){
+    c(mean = mean(x[[col]], na.rm=TRUE),
+      sd = sd(x[[col]], na.rm=TRUE))
+  }
+  data_sum<-ddply(data, groupnames, .fun=summary_func,
+                  varname)
+  data_sum <- rename(data_sum, c("mean" = varname))
+ return(data_sum)
+}
+```
+
+```{r}
+data_virus <- data_summary(data_virus, varname="value", 
+                    groupnames=c("condition", "variable"))
+# Convert dose to a factor variable
+data_virus$variable =as.factor(data_virus$variable)
+head(data_virus)
+```
+```{r}
+brewer.pal(n = 8, name = "Paired")
+```
+
+```{r}
+pdf("results/virus_levels/Calu3_virus_levels.pdf", height = 5)
+a<- ggplot(data_virus, aes(x=variable, y=value, fill = condition))+
+  geom_bar(stat="identity", position=position_dodge())+
+  scale_fill_manual(values =c("#1F78B4","#A6CEE3"))+ 
+  theme(legend.title=element_text(size=8),legend.text=element_text(size=12),
+        legend.key.size=unit(0.7,"line"),plot.title = element_text(hjust = 0.5),
+        axis.title.y=element_text(size=15, color = "black"),axis.title.x=element_text(size=10, color = "black"),
+        axis.text.y=element_text(size=12, color = "black"),axis.text.x=element_text(size=10, color = "black"))+
+  geom_errorbar(aes(ymin=value-sd, ymax=value+sd), width=.2,
+                 position=position_dodge(.9))+ theme_minimal()
+a
+dev.off()
+```
+
+
+```{r}
+#theme_set(theme_classic())
+a<- ggplot(table, aes(x=Term, y=-log10(Adjusted.P.value), fill = Sign))+
+  geom_bar(stat="identity", colour="black", size = 0.3)+
+  scale_x_discrete(limits = position) + coord_flip()+
+  scale_fill_manual(values =c("#009933","#cc0000")) + geom_text(aes(label=Overlap), size=3, color = "white", hjust = 1.1)+ 
+  theme(legend.title=element_text(size=8),legend.text=element_text(size=6),
+        legend.key.size=unit(0.7,"line"),plot.title = element_text(hjust = 0.5),
+        axis.title.y=element_text(size=15, color = "black"),axis.title.x=element_text(size=15, color = "black"),
+        axis.text.y=element_text(size=12, color = "black"),axis.text.x=element_text(size=12, color = "black"))
+ 
+a
+```
+
+
+```{r}
+for(comp in list_comp){
+  c2 <- substr(comp, 1,10)[1]
+  c1 <- substr(comp, 12,21)[1]
+  dge <- extract_limma(fit, design, name_ana, c1, c2, viral_proteins)
+  print(dge)
+  dat <- select(data_norm, contains(c1), contains(c2))
+  clustering_DGE(dat, dge, name_ana, comp, annotationInfo)
+  top_table_up <- dge[dge$Significance_2 == "upregulated",]
+  top_table_down <- dge[dge$Significance_2 == "downregulated",]
+  print(top_table_up)
+  name_up <- paste0("results/",name_ana,"/GSEA/prot_up_regulated_", comp, ".txt")
+  name_down <- paste0("results/",name_ana,"/GSEA/prot_down_regulated_", comp, ".txt")
+  print(name_up)
+  print(name_down)
+  write.table(data.frame(top_table_up$Gene_name), file = name_up, sep = "\t",
+            row.names = FALSE)
+  write.table(data.frame(data = top_table_down$Gene_name), file = name_down, sep = "\t",
+            row.names = FALSE)
+}
+```

@@ -1,0 +1,330 @@
+---
+title: "Analysis cell lines"
+output: html_notebook
+---
+
+
+### clean environment
+```{r}
+rm(list=ls())
+```
+
+### set directory
+```{r setup}
+    knitr::opts_knit$set(root.dir = normalizePath("~/Desktop/Code-PHD/Proteomics_virus/")) 
+```
+
+```{r}
+library(ggplot2)
+```
+
+
+## ven diagram
+
+```{r}
+
+```
+
+## level virus
+
+```{r}
+virus_293 <- read.csv("/home/flomik/Desktop/Code-PHD/Proteomics_virus/results/virus_levels/293Tdifferences_viral_proteins.csv")
+virus_caco <-read.csv("/home/flomik/Desktop/Code-PHD/Proteomics_virus/results/virus_levels/Caco2differences_viral_proteins.csv")
+virus_calu <-read.csv("/home/flomik/Desktop/Code-PHD/Proteomics_virus/results/virus_levels/Calu3differences_viral_proteins.csv")
+virus_Huh7 <-read.csv("/home/flomik/Desktop/Code-PHD/Proteomics_virus/results/virus_levels/Huh7differences_viral_proteins.csv")
+```
+```{r}
+virus_data <- rbind(virus_293, virus_caco, virus_calu, virus_Huh7)
+```
+```{r}
+names(virus_data)
+```
+```{r}
+table_virus <- data.frame(Proteins = unique(virus_data$Proteins), Gene_name = NA)
+```
+```{r}
+list_virus <- c("N", "S", "rep", "M", "7a", "9b", "3a","8", "6")
+```
+
+```{r}
+table_virus$Gene_name <- list_virus
+```
+
+```{r}
+virus_data <- merge(virus_data, table_virus, all.y = TRUE)
+```
+```{r}
+virus_data <- virus_data[order(virus_data$Proteins),]
+```
+
+```{r}
+prot_6 <- virus_data[97:102,]
+prot_6$value <- 0
+prot_6$Cell_line <- c(rep("293T", 3), rep("Huh7", 3))
+```
+
+```{r}
+virus_data <- data.frame(rbind(virus_data, prot_6))
+```
+
+```{r}
+#+++++++++++++++++++++++++
+# Function to calculate the mean and the standard deviation
+  # for each group
+#+++++++++++++++++++++++++
+# data : a data frame
+# varname : the name of a column containing the variable
+  #to be summariezed
+# groupnames : vector of column names to be used as
+  # grouping variables
+data_summary <- function(data, varname, groupnames){
+  require(plyr)
+  summary_func <- function(x, col){
+    c(mean = mean(x[[col]], na.rm=TRUE),
+      sd = sd(x[[col]], na.rm=TRUE))
+  }
+  data_sum<-ddply(data, groupnames, .fun=summary_func,
+                  varname)
+  data_sum <- rename(data_sum, c("mean" = varname))
+ return(data_sum)
+}
+```
+
+```{r}
+data_virus <- data_summary(virus_data, varname="value", 
+                    groupnames=c("Gene_name", "Cell_line"))
+# Convert dose to a factor variable
+#data_virus$variable =as.factor(data_virus$variable)
+head(data_virus)
+```
+
+c("#F0A165", "#97355D","#345F9D","#639D40")
+
+c("#ffb3ba", "#ffdfba", "#baffc9", "#bae1ff")
+
+```{r}
+data_virus$Cell_line <- as.character(data_virus$Cell_line)
+```
+
+```{r}
+data_virus$Cell_line <- ifelse(data_virus$Cell_line == "293T", "293FT",data_virus$Cell_line)
+data_virus$Cell_line <- ifelse(data_virus$Cell_line == "Calu3", "Calu-3",data_virus$Cell_line)
+```
+
+```{r}
+pdf("results/virus_levels/virus_proteins_levels_difference.pdf", height = 6)
+a<- ggplot(data_virus, aes(x=Gene_name, y=value, fill = Cell_line))+
+  geom_errorbar(aes(ymin=value-sd, ymax=value+sd), width=.2,
+                 position=position_dodge(.9))+ theme_minimal()+
+  geom_bar(position=position_dodge(), color="black", stat = "identity", alpha = 1)+
+  scale_fill_manual(values = c("#F0A165", "#97355D","#345F9D","#639D40"))+ theme_minimal()+ 
+  theme(legend.title=element_text(size=10),legend.text=element_text(size=10),
+        legend.key.size=unit(0.7,"line"),plot.title = element_text(hjust = 0.5),
+        axis.title.y=element_text(size=16, color = "black", face="bold"),axis.title.x=element_text(size=16, color = "black", face="bold"),
+        axis.text.y=element_text(size=14, color = "black"),axis.text.x=element_text(size=14, color = "black"))+ylab("Baseline Subtraction (Infected-Mock)")+xlab("Proteins")
+
+a
+dev.off()
+```
+
+```{r}
+pdf("results/virus_levels/virus_proteins_levels_difference_line_1.pdf")
+a<- ggplot(data_virus, aes(x=Gene_name, y=value, fill = Cell_line))+
+  geom_errorbar(aes(ymin=value-sd, ymax=value+sd), width=.2,
+                 position=position_dodge(.9))+ theme_minimal()+
+  geom_bar(position=position_dodge(), color="black", stat = "identity", alpha = 1)+
+  scale_fill_manual(values =c("#ffb3ba", "#ffdfba", "#baffc9", "#bae1ff"))+ theme_minimal()+ 
+  theme(legend.title=element_text(size=10),legend.text=element_text(size=10),
+        legend.key.size=unit(0.7,"line"),plot.title = element_text(hjust = 0.5),
+        axis.title.y=element_text(size=10, color = "black"),axis.title.x=element_text(size=10, color = "black"),
+        axis.text.y=element_text(size=10, color = "black"),axis.text.x=element_text(size=10, color = "black"))+xlab("Baseline Subtraction (Infected-Mock)")+ geom_hline(yintercept=1, linetype="dashed", 
+                color = "black")
+
+a
+dev.off()
+```
+
+## PATHWAY ANALYSIS
+```{r}
+library(ReactomePA)
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(xlsx)
+data("gcSample")
+```
+## load data
+```{r}
+Hu <- read.xlsx("/home/flomik/Desktop/Code-PHD/Proteomics_virus/results/overlap_proteomics.xlsx", 1)
+caco <- read.xlsx("/home/flomik/Desktop/Code-PHD/Proteomics_virus/results/overlap_proteomics.xlsx", 2)
+calu <- read.xlsx("/home/flomik/Desktop/Code-PHD/Proteomics_virus/results/overlap_proteomics.xlsx", 3)
+```
+
+```{r}
+Hu <- bitr(Hu$Gene_name, fromType = "SYMBOL", toType = c("ENTREZID"), OrgDb = org.Hs.eg.db)
+caco <- bitr(caco$Gene_name, fromType = "SYMBOL", toType = c("ENTREZID"), OrgDb = org.Hs.eg.db)
+calu <- bitr(calu$Gene_name, fromType = "SYMBOL", toType = c("ENTREZID"), OrgDb = org.Hs.eg.db)
+```
+```{r}
+samples <- list(Huh7 = Hu$ENTREZID, Caco2 = caco$ENTREZID, Calu3 = calu$ENTREZID)
+```
+
+```{r}
+res <- compareCluster(samples, fun="enrichPathway")
+```
+
+```{r}
+source("src/dot_plot.R")
+```
+```{r}
+enrichplot::filter(plotting.clusterProfile)
+```
+```{r}
+pdf("results/Comparison_pathways_cell_lines.pdf", width = 12)
+dotplot(res)
+dev.off()
+```
+
+
+```{r}
+#' Save figure as PDF in results
+#'
+#' @param n_page number of the page to extract from excel file
+#' @param name_ana name comparison
+#' @param height height of the figure
+#' @param width width of the figure
+run_reactomePA <- function(n_page, name_ana, height, width){
+  overlap <- read.xlsx("/home/flomik/Desktop/Code-PHD/Proteomics_virus/results/overlap_proteomics.xlsx", n_page)
+  overlap <- bitr(overlap$Proteins, fromType = "SYMBOL", toType = c("ENTREZID"), OrgDb = org.Hs.eg.db)
+  m <- enrichPathway(gene=overlap$ENTREZID, pvalueCutoff=0.05, readable=T, qvalueCutoff = 0.2)
+  head(m)
+  path_file <-paste0("results/figures/", name_ana, "barplot.pdf")
+  pdf(path_file, width = width, height = width)
+  x <- barplot(m, showCategory=15)
+  print(x)
+  dev.off()
+  return(m)
+}
+```
+
+```{r}
+x <- run_reactomePA(4, "overlap_3_cell_lines_2", 6, 10)
+
+run_reactomePA(5, "overlap_Huh7_Caco2", 6, 10)
+run_reactomePA(6, "overlap_Huh7_Calu3", 6, 10)
+
+y <- run_reactomePA(7, "overlap_Caco2_Calu3", 6, 10)
+
+run_reactomePA(8, "only_Huh7", 6, 10)
+#run_reactomePA(9, "only_Caco2", 6, 10)
+run_reactomePA(10, "only_Calu3", 6, 15)
+```
+```{r}
+table_ifn <- data.frame(Pathway = x@result$Description[1:4], Nb_genes = x@result$Count[1:4], Genes = x@result$geneID[1:4])
+
+table_ifn_2 <- data.frame(Pathway = y@result$Description[1:3], Nb_genes = y@result$Count[1:3], Genes = y@result$geneID[1:3])
+```
+```{r}
+genes_ifn_3_cell_lines <- c("DDX58", "ISG15", "IFIT1", "STAT1", "STAT2", "IFI35")
+
+genes_ifn_caco_calu_cell_lines <- c(as.list(strsplit(as.vector(table_ifn_2$Genes[1]), "[/]")[[1]]),
+                                    as.list(strsplit(as.vector(table_ifn_2$Genes[2]), "[/]")[[1]]),
+                                    as.list(strsplit(as.vector(table_ifn_2$Genes[3]), "[/]")[[1]]))
+
+genes_ifn_caco_calu_cell_lines_2 <- unique(genes_ifn_caco_calu_cell_lines)
+```
+
+```{r}
+write.csv(t(genes_ifn_caco_calu_cell_lines_2), "processing/list_overlap_IFN_caco_calu_reactome.csv")
+```
+
+
+## Reactome overlap
+```{r}
+overlap <- read.xlsx("/home/flomik/Desktop/Code-PHD/Proteomics_virus/results/overlap_proteomics.xlsx", 4)
+overlap <- bitr(overlap$Proteins, fromType = "SYMBOL", toType = c("ENTREZID"), OrgDb = org.Hs.eg.db)
+m <- enrichPathway(gene=overlap$ENTREZID, pvalueCutoff=0.05, readable=T, qvalueCutoff = 0.2)
+pdf("results/overlap_3_cell_lines.pdf", width = 10)
+dotplot(m, showCategory=15)
+dev.off()
+```
+```{r}
+overlap_hu_c2 <- read.xlsx("/home/flomik/Desktop/Code-PHD/Proteomics_virus/results/overlap_proteomics.xlsx", 5)
+overlap_hu_c2 <- bitr(overlap_hu_c2$Proteins, fromType = "SYMBOL", toType = c("ENTREZID"), OrgDb = org.Hs.eg.db)
+m <- enrichPathway(gene=overlap_hu_c2$ENTREZID, pvalueCutoff=0.05, readable=T, qvalueCutoff = 0.2)
+pdf("results/overlap_Hu_caco2.pdf")
+dotplot(m, showCategory=15)
+dev.off()
+```
+
+```{r}
+input_1 <- read.delim("/home/flomik/Desktop/Code-PHD/Proteomics_virus/processing/norm_files/293T_Huh7_norm_file.txt")
+input_2 <- read.delim("/home/flomik/Desktop/Code-PHD/Proteomics_virus/processing/norm_files/Calu3_Caco2_norm_file.txt")
+```
+
+```{r}
+input <- merge(input_1, input_2, by="X", all.x = TRUE, all.y = TRUE)
+```
+```{r}
+names(input)
+```
+```{r}
+rownames(input) <- input$X
+input$X <- NULL
+```
+
+```{r}
+batch <- gsub("\\_.*", "", names(input))
+batch <- ifelse(batch == "R1", 1, 2)
+condition <- gsub('.{1}$', '', names(input))
+                                    
+pheno <- data.frame(Names = colnames(input), Batch = batch, Condition = condition)
+
+print(pheno)
+
+# create model matrix with intercept term(whithout batch)
+modcombat2 <- model.matrix(~ condition) 
+
+# adjust batch effect (defaut parametric Bayesian adjustments)
+combat_edata <- ComBat(dat = as.matrix(input), batch = batch, mod = modcombat2, 
+                      par.prior = TRUE, prior.plots = FALSE, mean.only = FALSE)
+
+combat_edata  <- data.frame(combat_edata)
+```
+
+```{r}
+path_table <- paste0("results/", name_ana, "/QT_Combat_LIMMA/", name_ana, "_QT_Combat_LIMMA_data_after_batch_removal.txt")
+
+write.table(combat_edata, file =path_table, sep = "\t", row.names = TRUE, 
+            col.names = NA)
+
+```
+
+```{r}
+pca_data <- data.frame(group = condition,
+                       t(as.matrix(combat_edata)))
+```
+
+```{r}
+pca_data[is.na(pca_data)] <-  0
+pca <- prcomp(pca_data[,-1])
+```
+
+```{r}
+autoplot(pca, data = pca_data, colour = 'group', size= 6)+ 
+  scale_color_manual(values = c("#4e342e","#f57f17", "#2e7d32", "#c62828"))
+
+path_fig <- paste0("results/", name_ana, "/figures/", name_ana, 
+                   "_PCA_after_batch_removal.pdf")
+dev.copy(pdf, path_fig)
+dev.off()
+```
+
+```{r}
+autoplot(pca, data = pca_data, colour = 'group', size= 2, label.size = 3, label = TRUE, shape = FALSE)+ 
+  scale_color_manual(values = c("#4e342e","#f57f17", "#2e7d32", "#c62828"))
+
+path_fig <- paste0("results/", name_ana, "/figures/", name_ana, 
+                   "_PCA_after_batch_removal_label.pdf")
+dev.copy(pdf, path_fig)
+dev.off()
+```

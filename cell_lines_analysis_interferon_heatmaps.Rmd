@@ -1,0 +1,407 @@
+---
+title: "Heatmap for pathways Caco2 / Calu3"
+output: html_notebook
+---
+
+### clean environment
+```{r}
+rm(list=ls())
+```
+
+### set directory
+```{r setup}
+    knitr::opts_knit$set(root.dir = normalizePath("~/Desktop/Code-PHD/Proteomics_virus/")) 
+```
+
+```{r}
+library(dplyr)
+library(xlsx)
+library(ggrepel)
+```
+
+## Upload data
+```{r}
+caco <- read.delim("/home/flomik/Desktop/Code-PHD/Proteomics_virus/processing/norm_files/Caco2_norm_file.txt")
+calu <- read.delim("/home/flomik/Desktop/Code-PHD/Proteomics_virus/processing/norm_files/Calu3_norm_file.txt")
+huh7 <- read.delim("/home/flomik/Desktop/Code-PHD/Proteomics_virus/processing/norm_files/293T_Huh7_norm_file.txt")
+t293 <- read.delim("/home/flomik/Desktop/Code-PHD/Proteomics_virus/processing/norm_files/293T_norm_file.txt")
+```
+
+
+## Filter for interferon
+```{r}
+antiviral <- read.delim("/home/flomik/Desktop/Code-PHD/Corona_projects/INF_Grant/data/databases/step_3/antiviral_mechanism_IFN.tsv")
+antiviral <- gsub(".* ", "", antiviral$MoleculeName)
+inf_alpha_beta <- read.delim("/home/flomik/Desktop/Code-PHD/Corona_projects/INF_Grant/data/databases/step_3/reactome_interferon_alpha_beta.tsv")
+inf_alpha_beta <- gsub(".* ", "", inf_alpha_beta$MoleculeName)
+inf_gamma <- read.delim("/home/flomik/Desktop/Code-PHD/Corona_projects/INF_Grant/data/databases/step_3/reactome_interferon_gamma.tsv")
+inf_gamma <- gsub(".* ", "", inf_gamma$MoleculeName)
+```
+
+```{r}
+inf <- unique(c(antiviral, inf_alpha_beta, inf_gamma))
+```
+
+## Import DGE
+```{r}
+T293_DGE <- read.xlsx("/home/flomik/Desktop/Code-PHD/Proteomics_virus/results/293T/DGE/293T_R1_293T_U_vs_R1_293T_T_DGE_results.xlsx", 1)
+calu3_DGE <- read.xlsx("/home/flomik/Desktop/Code-PHD/Proteomics_virus/results/Calu3/DGE/Calu3_R2_Calu3_U_vs_R2_Calu3_T_DGE_results.xlsx",1)
+caco2_DGE <- read.xlsx("/home/flomik/Desktop/Code-PHD/Proteomics_virus/results/Caco2/DGE/Caco2_R2_Caco2_U_vs_R2_Caco2_T_DGE_results.xlsx", 1)
+huh7_DGE <- read.xlsx("/home/flomik/Desktop/Code-PHD/Proteomics_virus/results/Huh7/DGE/Huh7_R1_Huh7_U_vs_R1_Huh7_T_DGE_results.xlsx", 1)
+#huh7_DGE <- read.xlsx("/home/flomik/Desktop/Code-PHD/Proteomics_virus/data/SARS-2/covid-19_proteomics_UNINF_vs_H48PI_DGE_results.xlsx",1)
+```
+
+## Filter for interferon
+```{r}
+calu3_DGE <- calu3_DGE[calu3_DGE$Gene_name %in% inf, ]
+caco2_DGE <- caco2_DGE[caco2_DGE$Gene_name %in% inf, ]
+T293_DGE <- T293_DGE[T293_DGE$Gene_name %in% inf, ]
+huh7_DGE <- huh7_DGE[huh7_DGE$Gene_name %in% inf, ]
+```
+
+```{r}
+names(calu)[1] <- "Accession"
+calu3_DGE <- select(calu3_DGE, Accession, Gene_name, logFC, adj.P.Val)
+calu3 <- merge(calu, calu3_DGE, by = "Accession")
+```
+```{r}
+names(huh7)[1] <- "Accession"
+huh7_DGE <- select(huh7_DGE, Accession, Gene_name, logFC, adj.P.Val)
+huh7 <- merge(huh7, huh7_DGE, by = "Accession")
+```
+
+```{r}
+names(t293)[1] <- "Accession"
+t293_DGE <- select(T293_DGE, Accession, Gene_name, logFC, adj.P.Val)
+t293 <- merge(t293, T293_DGE, by = "Accession")
+```
+
+```{r}
+library(ComplexHeatmap)
+library(circlize)
+```
+
+
+```{r}
+data_heatmap <-t293
+```
+
+```{r}
+data_heatmap$Pathway <- ifelse(data_heatmap$Gene_name %in% antiviral, "Antiviral mechanism by IFN-stimulated genes", NA)
+data_heatmap$Pathway <- ifelse(data_heatmap$Gene_name %in% inf_alpha_beta, "Interferon alpha/beta signaling", data_heatmap$Pathway)
+data_heatmap$Pathway <- ifelse(data_heatmap$Gene_name %in% inf_gamma, "Interferon gamma signaling", data_heatmap$Pathway)
+```
+
+```{r}
+#col_fun1 = colorRamp2(c(-2,-1.7,-0.7, 0,0.7,1.7, 2), c("#7F7F00","#B2B200" ,"#E5E500","white","#BF7FBF","#993299","#590059"))
+col_fun2 = colorRamp2(c(-2.5,  -0.001 ,0,  0.001, 1.5), c("#263f72", "#b3ccff","white","#ff9999", "#962f2f"))
+```
+
+```{r}
+data_heatmap[,c(2:7)] <- t(scale(t(data_heatmap[,c(2:7)])))
+rownames(data_heatmap) <- data_heatmap$Gene_name
+```
+
+```{r}
+library(RColorBrewer)
+col = brewer.pal(n = 6, name = "YlOrRd")
+```
+```{r}
+data_heatmap$logFC <- ifelse(data_heatmap$adj.P.Val < 0.05, data_heatmap$logFC, NA)
+```
+
+```{r}
+col_fun1 = colorRamp2(c(-2,-1,-0.5, 0,0.5,1,2), c("#7F7F00","#B2B200" ,"#E5E500","white","#BF7FBF","#993299","#590059"))
+```
+
+```{r}
+min(data_heatmap[,c(2, 4, 6, 3, 5, 7)])
+max(data_heatmap[,c(2, 4, 6, 3, 5, 7)])
+```
+```{r}
+condition <- factor(c(rep("Mock", 3), rep("24hpi", 3)), levels = c("Mock", "24hpi"))
+```
+
+```{r}
+pdf("results/figures/Heatmat_covid_293T_cells_inf.pdf", width = 10, height = 18)
+ht = Heatmap(as.matrix(data_heatmap[,c(2, 4, 6, 3, 5, 7)]),
+             col = col_fun1,
+             show_row_names = TRUE,
+             show_column_names = FALSE,
+             column_order = colnames(data_heatmap[,c(2, 4, 6, 3, 5, 7)]),
+             column_split = condition,
+             row_split = data_heatmap$Pathway,
+             column_title_gp = gpar(fill = c(rep("white", 2))),
+             #row_title_gp = gpar(fill = c(rep("white", 4))),
+             border = FALSE,row_title_rot = 0,
+             column_gap = unit(2, "mm"),
+             right_annotation = rowAnnotation(LogFC = data_heatmap$logFC, col = list(LogFC = col_fun2))
+             )
+ht
+dev.off()
+```
+
+```{r}
+data_heatmap <- huh7
+```
+
+```{r}
+data_heatmap$Pathway <- ifelse(data_heatmap$Gene_name %in% antiviral, "Antiviral mechanism by IFN-stimulated genes", NA)
+data_heatmap$Pathway <- ifelse(data_heatmap$Gene_name %in% inf_alpha_beta, "Interferon alpha/beta signaling", data_heatmap$Pathway)
+data_heatmap$Pathway <- ifelse(data_heatmap$Gene_name %in% inf_gamma, "Interferon gamma signaling", data_heatmap$Pathway)
+```
+
+```{r}
+#col_fun1 = colorRamp2(c(-2,-1.7,-0.7, 0,0.7,1.7, 2), c("#7F7F00","#B2B200" ,"#E5E500","white","#BF7FBF","#993299","#590059"))
+col_fun2 = colorRamp2(c(-2.5,  -0.001 ,0,  0.001, 1.5), c("#263f72", "#b3ccff","white","#ff9999", "#962f2f"))
+```
+
+```{r}
+data_heatmap[,c(2:7)] <- t(scale(t(data_heatmap[,c(2:7)])))
+rownames(data_heatmap) <- data_heatmap$Gene_name
+```
+
+```{r}
+library(RColorBrewer)
+col = brewer.pal(n = 6, name = "YlOrRd")
+```
+```{r}
+data_heatmap$logFC <- ifelse(data_heatmap$adj.P.Val < 0.05, data_heatmap$logFC, NA)
+```
+
+```{r}
+col_fun1 = colorRamp2(c(-2,-1,-0.5, 0,0.5,1,2), c("#7F7F00","#B2B200" ,"#E5E500","white","#BF7FBF","#993299","#590059"))
+```
+
+```{r}
+min(data_heatmap[,c(2, 4, 6, 3, 5, 7)])
+max(data_heatmap[,c(2, 4, 6, 3, 5, 7)])
+```
+```{r}
+condition <- factor(c(rep("Mock", 3), rep("24hpi", 3)), levels = c("Mock", "24hpi"))
+```
+
+```{r}
+pdf("results/figures/Heatmat_covid_huh7_cells_inf.pdf", width = 10, height = 18)
+ht = Heatmap(as.matrix(data_heatmap[,c(2, 4, 6, 3, 5, 7)]),
+             col = col_fun1,
+             show_row_names = TRUE,
+             show_column_names = FALSE,
+             column_order = colnames(data_heatmap[,c(2, 4, 6, 3, 5, 7)]),
+             column_split = condition,
+             row_split = data_heatmap$Pathway,
+             column_title_gp = gpar(fill = c(rep("white", 2))),
+             #row_title_gp = gpar(fill = c(rep("white", 4))),
+             border = FALSE,row_title_rot = 0,
+             column_gap = unit(2, "mm"),
+             right_annotation = rowAnnotation(LogFC = data_heatmap$logFC, col = list(LogFC = col_fun2))
+             )
+ht
+dev.off()
+```
+
+```{r}
+data_heatmap <- calu3
+```
+
+```{r}
+data_heatmap$Pathway <- ifelse(data_heatmap$Gene_name %in% antiviral, "Antiviral mechanism by IFN-stimulated genes", NA)
+data_heatmap$Pathway <- ifelse(data_heatmap$Gene_name %in% inf_alpha_beta, "Interferon alpha/beta signaling", data_heatmap$Pathway)
+data_heatmap$Pathway <- ifelse(data_heatmap$Gene_name %in% inf_gamma, "Interferon gamma signaling", data_heatmap$Pathway)
+```
+
+```{r}
+#col_fun1 = colorRamp2(c(-2,-1.7,-0.7, 0,0.7,1.7, 2), c("#7F7F00","#B2B200" ,"#E5E500","white","#BF7FBF","#993299","#590059"))
+col_fun2 = colorRamp2(c(-2.5,  -0.001 ,0,  0.001, 1.5), c("#263f72", "#b3ccff","white","#ff9999", "#962f2f"))
+```
+
+```{r}
+data_heatmap[,c(2:7)] <- t(scale(t(data_heatmap[,c(2:7)])))
+rownames(data_heatmap) <- data_heatmap$Gene_name
+```
+
+```{r}
+library(RColorBrewer)
+col = brewer.pal(n = 6, name = "YlOrRd")
+```
+```{r}
+data_heatmap$logFC <- ifelse(data_heatmap$adj.P.Val < 0.05, data_heatmap$logFC, NA)
+```
+
+```{r}
+col_fun1 = colorRamp2(c(-2,-1,-0.5, 0,0.5,1,2), c("#7F7F00","#B2B200" ,"#E5E500","white","#BF7FBF","#993299","#590059"))
+```
+
+```{r}
+min(data_heatmap[,c(2, 4, 6, 3, 5, 7)])
+max(data_heatmap[,c(2, 4, 6, 3, 5, 7)])
+```
+```{r}
+condition <- factor(c(rep("Mock", 3), rep("24hpi", 3)), levels = c("Mock", "24hpi"))
+```
+
+```{r}
+pdf("results/figures/Heatmat_covid_calu3_cells_inf.pdf", width = 10, height = 18)
+ht = Heatmap(as.matrix(data_heatmap[,c(2, 4, 6, 3, 5, 7)]),
+             col = col_fun1,
+             show_row_names = TRUE,
+             show_column_names = TRUE,
+             column_order = colnames(data_heatmap[,c(2, 4, 6, 3, 5, 7)]),
+             column_split = condition,
+             row_split = data_heatmap$Pathway,
+             column_title_gp = gpar(fill = c(rep("white", 2))),
+             #row_title_gp = gpar(fill = c(rep("white", 4))),
+             border = FALSE,row_title_rot = 0,
+             column_gap = unit(2, "mm"),
+             right_annotation = rowAnnotation(LogFC = data_heatmap$logFC, col = list(LogFC = col_fun2))
+             )
+ht
+dev.off()
+```
+```{r}
+table_nodes_1 <- data.frame(Node_1 = data_heatmap$Gene_name, LogFC = data_heatmap$logFC)
+table_nodes_2 <- data.frame(Node_1 = unique(data_heatmap$Pathway), LogFC = NA)
+table_nodes <- rbind(table_nodes_1, table_nodes_2)
+
+write.table(table_nodes, "results/network/cell_lines_covid_calu3_inf_table_nodes.txt", sep = "\t",
+            row.names = TRUE, col.names = NA, quote = FALSE)
+```
+
+```{r}
+table_edges_1 <- data.frame(Node_1 = data_heatmap$Gene_name, Node_2 = data_heatmap$Pathway)
+table_edges_2 <- read.delim("/home/flomik/Desktop/Code-PHD/Proteomics_virus/data/STRING/string_interactions_inf_calu3.tsv")
+names(table_edges_2)[1:2] <- c("Node_1", "Node_2")
+table_edges <- rbind(table_edges_1, table_edges_2[,1:2])
+
+write.table(table_edges, "results/network/cell_lines_covid_calu3_inf_table_edges.txt", sep = "\t",
+            row.names = TRUE, col.names = NA, quote = FALSE)
+```
+
+```{r}
+data_heatmap <- caco2
+```
+
+```{r}
+data_heatmap$Pathway <- ifelse(data_heatmap$Gene_name %in% antiviral, "Antiviral mechanism by IFN-stimulated genes", NA)
+data_heatmap$Pathway <- ifelse(data_heatmap$Gene_name %in% inf_alpha_beta, "Interferon alpha/beta signaling", data_heatmap$Pathway)
+data_heatmap$Pathway <- ifelse(data_heatmap$Gene_name %in% inf_gamma, "Interferon gamma signaling", data_heatmap$Pathway)
+```
+
+```{r}
+#col_fun1 = colorRamp2(c(-2,-1.7,-0.7, 0,0.7,1.7, 2), c("#7F7F00","#B2B200" ,"#E5E500","white","#BF7FBF","#993299","#590059"))
+col_fun2 = colorRamp2(c(-2.5,  -0.001 ,0,  0.001, 1.5), c("#263f72", "#b3ccff","white","#ff9999", "#962f2f"))
+```
+
+```{r}
+data_heatmap[,c(2:7)] <- t(scale(t(data_heatmap[,c(2:7)])))
+rownames(data_heatmap) <- data_heatmap$Gene_name
+```
+
+
+
+
+```{r}
+library(RColorBrewer)
+col = brewer.pal(n = 6, name = "YlOrRd")
+```
+```{r}
+data_heatmap$logFC <- ifelse(data_heatmap$adj.P.Val < 0.05, data_heatmap$logFC, NA)
+```
+```{r}
+data_heatmap <- data_heatmap[data_heatmap$Gene_name != "FLNB",]
+```
+
+## Network
+```{r}
+table_nodes_1 <- data.frame(Node_1 = data_heatmap$Gene_name, LogFC = data_heatmap$logFC)
+table_nodes_2 <- data.frame(Node_1 = unique(data_heatmap$Pathway), LogFC = NA)
+table_nodes <- rbind(table_nodes_1, table_nodes_2)
+
+write.table(table_nodes, "results/network/cell_lines_covid_caco2_inf_table_nodes.txt", sep = "\t",
+            row.names = TRUE, col.names = NA, quote = FALSE)
+```
+
+```{r}
+table_edges_1 <- data.frame(Node_1 = data_heatmap$Gene_name, Node_2 = data_heatmap$Pathway)
+table_edges_2 <- read.delim("/home/flomik/Desktop/Code-PHD/Proteomics_virus/data/STRING/string_interactions_inf_caco2.tsv")
+names(table_edges_2)[1:2] <- c("Node_1", "Node_2")
+table_edges <- rbind(table_edges_1, table_edges_2[,1:2])
+```
+
+```{r}
+table_nodes$Node_1 %in% table_edges$Node_2
+```
+
+```{r}
+write.table(table_edges, "results/network/cell_lines_covid_caco2_inf_table_edges.txt", sep = "\t",
+            row.names = TRUE, col.names = NA, quote = FALSE)
+```
+
+```{r}
+condition <- factor(c(rep("Mock", 3), rep("24hpi", 3)), levels = c("Mock", "24hpi"))
+```
+
+```{r}
+pdf("results/figures/Heatmat_covid_caco2_cells_inf.pdf", width = 10, height = 18)
+ht = Heatmap(as.matrix(data_heatmap[,c(2, 4, 6, 3, 5, 7)]),
+             col = col_fun1,
+             show_row_names = TRUE,
+             show_column_names = TRUE,
+             column_order = colnames(data_heatmap[,c(2, 4, 6, 3, 5, 7)]),
+             column_split = condition,
+             row_split = data_heatmap$Pathway,
+             column_title_gp = gpar(fill = c(rep("white", 2))),
+             #row_title_gp = gpar(fill = c(rep("white", 4))),
+             border = FALSE,row_title_rot = 0,
+             column_gap = unit(2, "mm"),
+             right_annotation = rowAnnotation(LogFC = data_heatmap$logFC, col = list(LogFC = col_fun2))
+             )
+ht
+dev.off()
+```
+
+```{r}
+library(eulerr)
+```
+```{r}
+data <- data.frame(Pathways  = factor(c("Glycolysis / Gluconeogenesis", "Fructose and mannose metabolism", "HIF-1 signaling pathway", "Complement and coagulation cascades"), levels = c("Glycolysis / Gluconeogenesis", "Fructose and mannose metabolism", "HIF-1 signaling pathway", "Complement and coagulation cascades")))
+data$Total <- c(67, 33, 109, 85)
+data$Detected <- c(44, 28, 68, 27)
+data$Significant <- c(40, 25, 57, 19)
+```
+```{r}
+data$Non_detected <- data$Total - data$Detected 
+data$Non_significant <- data$Detected - data$Significant
+data$Detected <- NULL
+data$Total <- NULL
+```
+```{r}
+data <- data[data$Pathways != "HIF-1 signaling pathway",]
+```
+
+```{r}
+data_2 <- melt(data, by = "Pathways")
+```
+```{r}
+names(data_2)
+```
+```{r}
+data_2$variable <- factor(data_2$variable, levels = c("Significant", "Non_significant", "Non_detected"))
+```
+
+```{r}
+pdf("Number_proteins_analysis_covid_proteomics_calu3.pdf")
+ggplot(data_2, aes(fill=variable, y=value, x=Pathways)) + 
+    geom_bar(position="stack", stat="identity", colour = "black")+
+  scale_fill_brewer(palette = "Pastel1")+ 
+  theme(legend.title=element_text(size=12),legend.text=element_text(size=12),
+        legend.key.size=unit(0.7,"line"),plot.title = element_text(hjust = 0.5),
+        axis.title.y=element_text(size=12, color = "black"),axis.title.x=element_text(size=10, color = "black"),
+        axis.text.y=element_text(size=12, color = "black"),axis.text.x=element_text(size=10, color = "black", angle = 50, hjust = 1, vjust = 1))+xlab("")+ylab("Number of Proteins")+ 
+  geom_text(aes(label = value), 
+            position = position_stack(vjust= 0.5),
+            colour = "black", size = 4)
+dev.off()
+```
+
+

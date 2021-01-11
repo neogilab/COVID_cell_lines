@@ -1,0 +1,26 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+library(xlsx)
+```
+
+```{r}
+caco2_DGE <- read.xlsx("/home/flomik/Desktop/Code-PHD/Proteomics_virus/results/Caco2/DGE/Caco2_R2_Caco2_U_vs_R2_Caco2_T_DGE_results_filt.xlsx",1)
+```
+
+```{r}
+calu3_DGE <- read.xlsx("/home/flomik/Desktop/Code-PHD/Proteomics_virus/results/Calu3/DGE/Calu3_R2_Calu3_U_vs_R2_Calu3_T_DGE_results_filt.xlsx", 1)
+```
+
+```{r}
+#write.xlsx(calu3_DGE, file = "overlap_caco2_calu3.xlsx", sheetName="Calu3 all", append=TRUE)
+write.xlsx(caco2_DGE, file = "overlap_caco2_calu3.xlsx", sheetName="Caco2 all", append=TRUE)
+write.xlsx(calu3_DGE[calu3_DGE$logFC > 0, ], file = "overlap_caco2_calu3.xlsx", sheetName="calu3 up", append=TRUE)
+write.xlsx(calu3_DGE[calu3_DGE$logFC < 0, ], file = "overlap_caco2_calu3.xlsx", sheetName="calu3 down", append=TRUE)
+write.xlsx(caco2_DGE[caco2_DGE$logFC > 0, ], file = "overlap_caco2_calu3.xlsx", sheetName="Caco2 up", append=TRUE)
+write.xlsx(caco2_DGE[caco2_DGE$logFC < 0, ], file = "overlap_caco2_calu3.xlsx", sheetName="Caco2 down", append=TRUE)
+```
